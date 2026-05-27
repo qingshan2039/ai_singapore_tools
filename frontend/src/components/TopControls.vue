@@ -1,11 +1,27 @@
 <script setup>
-defineProps({
+import { computed } from 'vue'
+
+const props = defineProps({
   search: { type: String, default: '' },
   searchError: { type: String, default: '' },
   sortAdditional: Boolean,
   colorful: Boolean,
+  onlyMatches: Boolean,
+  onlyBigPayout: Boolean,
+  bigPayoutThreshold: { type: Number, default: 5_800_000 },
 })
-defineEmits(['update:search', 'update:sortAdditional', 'update:colorful'])
+defineEmits([
+  'update:search',
+  'update:sortAdditional',
+  'update:colorful',
+  'update:onlyMatches',
+  'update:onlyBigPayout',
+])
+
+const bigPayoutLabel = computed(() => {
+  const m = props.bigPayoutThreshold / 1_000_000
+  return `Big payouts (>$${m.toFixed(1)}M)`
+})
 </script>
 
 <template>
@@ -40,6 +56,22 @@ defineEmits(['update:search', 'update:sortAdditional', 'update:colorful'])
         />
         <span>Colorful</span>
       </label>
+      <label>
+        <input
+          type="checkbox"
+          :checked="onlyMatches"
+          @change="$emit('update:onlyMatches', $event.target.checked)"
+        />
+        <span>Only matches</span>
+      </label>
+      <label>
+        <input
+          type="checkbox"
+          :checked="onlyBigPayout"
+          @change="$emit('update:onlyBigPayout', $event.target.checked)"
+        />
+        <span>{{ bigPayoutLabel }}</span>
+      </label>
     </div>
   </div>
 </template>
@@ -66,7 +98,16 @@ defineEmits(['update:search', 'update:sortAdditional', 'update:colorful'])
   text-align: center;
 }
 
-.toggles { display: flex; justify-content: center; gap: 28px; margin-top: 12px; color: var(--primary); font-size: 17px; }
-.toggles label { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; user-select: none; }
-.toggles input[type="checkbox"] { width: 20px; height: 20px; accent-color: var(--primary); }
+.toggles {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  column-gap: 20px;
+  row-gap: 8px;
+  margin-top: 12px;
+  color: var(--primary);
+  font-size: 15px;
+}
+.toggles label { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; user-select: none; }
+.toggles input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--primary); }
 </style>

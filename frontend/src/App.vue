@@ -7,14 +7,12 @@ import { useDraws } from './composables/useDraws.js'
 
 const sortAdditional = ref(false)
 const colorful = ref(true)
+const onlyMatches = ref(false)         // 模式 1：只显示匹配 search 的期
+const onlyBigPayout = ref(false)       // 模式 2：只显示 total_payout_corrected > 5.8M
+const BIG_PAYOUT_THRESHOLD = 5_800_000
 const activeTab = ref('toto')
 
-// === Search 高亮 ===
-// 规则：
-// - 空字符串 → 不生效，列表按 colorful 显示
-// - 用空白分隔的数字 token，每个必须 ∈ [1, 49]
-// - 任一 token 非法 → 整体不生效 + 显示错误（行为可预测）
-// - 全部合法 → 列表中仅匹配号显示原色，其余置黑
+// === Search 高亮（仍是高亮器；onlyMatches 开启后再变成行过滤器） ===
 const searchInput = ref('')
 
 const parsedSearch = computed(() => {
@@ -40,7 +38,27 @@ const highlight = computed(() =>
 )
 const searchError = computed(() => parsedSearch.value.error)
 
+// === 数据 ===
 const { items, total, loading, error, done, loadMore } = useDraws({ pageSize: 50 })
+
+// === 显示过滤（在 loaded items 上做客户端过滤） ===
+const matchesFilterActive = computed(() => onlyMatches.value && highlight.value.size > 0)
+const filterActive = computed(() => matchesFilterActive.value || onlyBigPayout.value)
+
+const displayedItems = computed(() => {
+  let r = items.value
+  if (matchesFilterActive.value) {
+    const hl = highlight.value
+    r = r.filter(d => {
+      const all = [...d.numbers, d.additional_no]
+      return all.some(n => hl.has(n))
+    })
+  }
+  if (onlyBigPayout.value) {
+    r = r.filter(d => (d.total_payout_corrected ?? 0) > BIG_PAYOUT_THRESHOLD)
+  }
+  return r
+})
 
 // === 无限滚动 ===
 const sentinel = ref(null)
@@ -77,23 +95,36 @@ onBeforeUnmount(() => observer?.disconnect())
     :search-error="searchError"
     v-model:sortAdditional="sortAdditional"
     v-model:colorful="colorful"
+    v-model:onlyMatches="onlyMatches"
+    v-model:onlyBigPayout="onlyBigPayout"
+    :big-payout-threshold="BIG_PAYOUT_THRESHOLD"
   />
 
   <main v-if="activeTab === 'toto'" class="list">
     <DrawCard
-      v-for="(d, i) in items"
+      v-for="d in displayedItems"
       :key="d.draw_no"
       :draw="d"
-      :is-latest="i === 0"
+      :is-latest="items.length > 0 && d.draw_no === items[0].draw_no"
       :sort-additional="sortAdditional"
       :colorful="colorful"
       :highlight="highlight"
     />
 
+    <div
+      v-if="!loading && done && displayedItems.length === 0 && items.length > 0"
+      class="empty"
+    >
+      No draws match the current filters.
+    </div>
+
     <div ref="sentinel" class="sentinel">
       <span v-if="loading">Loading… ({{ items.length }} / {{ total || '?' }})</span>
       <span v-else-if="error" class="err">⚠ {{ error }} <button @click="loadMore">Retry</button></span>
-      <span v-else-if="done" class="done">— {{ total }} draws loaded —</span>
+      <span v-else-if="done" class="done">
+        <template v-if="filterActive">— showing {{ displayedItems.length }} of {{ total }} draws —</template>
+        <template v-else>— {{ total }} draws loaded —</template>
+      </span>
       <span v-else>&nbsp;</span>
     </div>
   </main>
@@ -108,6 +139,13 @@ onBeforeUnmount(() => observer?.disconnect())
 <style scoped>
 .list { display: flex; flex-direction: column; }
 .list :deep(.card + .card) { border-top: 1px solid var(--border); }
+
+.empty {
+  text-align: center;
+  padding: 32px 16px;
+  color: var(--text-muted);
+  font-size: 14px;
+}
 
 .sentinel {
   text-align: center;
