@@ -1,0 +1,32 @@
+version: "3.9"
+
+# 可选：当你想从 SQLite 切到 Postgres + Redis 时，docker compose up -d
+# 然后改 .env 里的 DATABASE_URL=postgresql+asyncpg://toto:toto@localhost:5432/toto
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: toto
+      POSTGRES_PASSWORD: toto
+      POSTGRES_DB: toto
+    ports:
+      - "5432:5432"
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U toto"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+
+volumes:
+  pg_data:
+  redis_data:
