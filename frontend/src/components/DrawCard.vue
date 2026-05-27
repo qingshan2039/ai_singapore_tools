@@ -19,9 +19,9 @@ function bucketClass(n) {
 }
 
 function colorClass(n) {
-  // search 高亮模式优先：非空时仅匹配号保色
+  // search 高亮模式：匹配号一律红色 + 红下划线，其它置黑
   if (props.highlight && props.highlight.size > 0) {
-    return props.highlight.has(n) ? bucketClass(n) : 'mono'
+    return props.highlight.has(n) ? 'hl' : 'mono'
   }
   // 无 search：按 Colorful 全彩 / 全黑
   if (!props.colorful) return 'mono'
@@ -117,4 +117,13 @@ const renderNumbers = computed(() => {
 .num.c4 { color: var(--color-30-39); }
 .num.c5 { color: var(--color-40-49); }
 .num.mono { color: var(--text); }
+
+/* search 命中：红字 + 红下划线 */
+.num.hl {
+  color: var(--danger);
+  text-decoration: underline;
+  text-decoration-color: var(--danger);
+  text-decoration-thickness: 3px;
+  text-underline-offset: 4px;
+}
 </style>
