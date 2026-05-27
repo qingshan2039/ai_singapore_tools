@@ -16,12 +16,12 @@
 server {
     listen 80;
     listen [::]:80;
-    server_name toto.your-domain.com;
+    server_name toto.hpclaw.duckdns.org;
 
     # ====== 前端静态 ======
     # 直接指向 vite build 的 dist 目录（绝对路径）。
     # frontend 每次 npm run build 后内容就刷新，nginx 不用 reload。
-    root /home/USER/ai_singapore_tools/frontend/dist;
+    root /opt/ai_singapore_tools/frontend/dist;
     index index.html;
 
     # gzip / 静态缓存
@@ -37,20 +37,18 @@ server {
     }
 
     # ====== API / FastAPI 自带页 反代到 docker 容器 ======
-    location ~ ^/(api/|docs($|/)|redoc($|/)|openapi\.json|health$) {
-        proxy_pass         http://127.0.0.1:8001;
-        proxy_http_version 1.1;
-        proxy_set_header   Host              $host;
-        proxy_set_header   X-Real-IP         $remote_addr;
-        proxy_set_header   X-Forwarded-For   $proxy_add_x_forwarded_for;
-        proxy_set_header   X-Forwarded-Proto $scheme;
-        proxy_set_header   Upgrade           $http_upgrade;
-        proxy_set_header   Connection        "upgrade";
-
-        # 长连接 / 大响应（共现矩阵 49x49 不大，预留）
-        proxy_read_timeout 60s;
-        proxy_buffering    on;
-    }
+    # 用朴素的 prefix / exact 匹配（不要用正则）：certbot 改写时不会丢，
+    # 也比正则更容易看懂、debug。各 location 共用同一段 proxy_* 指令。
+    location /api/           { proxy_pass http://127.0.0.1:8001; include /etc/nginx/proxy_params; }
+    location = /health       { proxy_pass http://127.0.0.1:8001; include /etc/nginx/proxy_params; }
+    location = /openapi.json { proxy_pass http://127.0.0.1:8001; include /etc/nginx/proxy_params; }
+    location /docs           { proxy_pass http://127.0.0.1:8001; include /etc/nginx/proxy_params; }
+    location /redoc          { proxy_pass http://127.0.0.1:8001; include /etc/nginx/proxy_params; }
+    # 如果系统没有 /etc/nginx/proxy_params（非 Debian/Ubuntu），把 include 行换成：
+    #   proxy_set_header Host              $host;
+    #   proxy_set_header X-Real-IP         $remote_addr;
+    #   proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+    #   proxy_set_header X-Forwarded-Proto $scheme;
 
     # ====== SPA fallback：所有其它路径回 index.html ======
     location / {
