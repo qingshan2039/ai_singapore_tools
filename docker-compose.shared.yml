@@ -1,0 +1,25 @@
+# 共享 VPS 方案：宿主机已有 nginx / Caddy / Traefik 在跑别的站点。
+# 本编排只起 backend，并把端口仅绑到 127.0.0.1，让宿主反代接管 HTTPS。
+#
+# 用法：
+#   cp .env.prod.example .env.prod   # 改 CORS_ORIGINS / JWT_SECRET
+#   echo 'BACKEND_PORT=8001' >> .env.prod   # 可选，默认就是 8001
+#   cd frontend && npm ci && npm run build && cd ..
+#   docker compose -f docker-compose.shared.yml up -d --build
+#
+# 然后配宿主机反代，模板见 deploy/nginx.vhost.conf.example
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    env_file: .env.prod
+    environment:
+      DB_PATH: /data/toto.db
+    volumes:
+      - ./data:/data
+    ports:
+      # 关键：bind 到 127.0.0.1，公网访问不到，只有宿主反代能转发进来
+      - "127.0.0.1:${BACKEND_PORT:-8001}:8000"
+    restart: unless-stopped

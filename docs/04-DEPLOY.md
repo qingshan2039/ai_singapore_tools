@@ -247,6 +247,92 @@ SQLite 单机够用到几百万条记录，没必要早切。但如果想：
 
 ---
 
+## 12-B. 共享 VPS：宿主已有 nginx，不能让 Caddy 抢 80/443
+
+如果这台 VPS 已经在跑别的网站（宿主机有 nginx / Caddy / Traefik 占着 :80/:443），就**不要**用 `docker-compose.prod.yml` 那套（它的 Caddy 会和宿主反代抢端口）。换 `docker-compose.shared.yml`：后端容器只把 8000 映射到 `127.0.0.1:8001`，公网完全访问不到，由宿主反代转发进来。
+
+### 步骤
+
+```bash
+# 1) clone + 配 env
+cd ~ && git clone https://github.com/qingshan2039/ai_singapore_tools.git
+cd ai_singapore_tools
+cp .env.prod.example .env.prod
+nano .env.prod
+#   API_CORS_ORIGINS=["https://toto.your-domain.com"]
+#   JWT_SECRET=<openssl rand -hex 32>
+#   BACKEND_PORT=8001         # 选一个宿主没占的端口，可省略，默认 8001
+
+# 2) build 前端
+cd frontend && npm ci && npm run build && cd ..
+
+# 3) 起后端容器（不会抢 80/443）
+docker compose -f docker-compose.shared.yml up -d --build
+
+# 4) 验证容器健康
+curl -sf http://127.0.0.1:8001/health   # 应返回 {"status":"ok"}
+```
+
+### 配置宿主 nginx
+
+把模板复制成 vhost 文件，按注释替换占位（域名、绝对路径、端口）：
+
+```bash
+sudo cp deploy/nginx.vhost.conf.example \
+        /etc/nginx/sites-available/toto.your-domain.com.conf
+sudo nano /etc/nginx/sites-available/toto.your-domain.com.conf
+# 把里面 toto.your-domain.com / /home/USER/... / 8001 三处占位替换好
+
+sudo ln -s /etc/nginx/sites-available/toto.your-domain.com.conf \
+           /etc/nginx/sites-enabled/
+
+sudo nginx -t                # 语法校验，必须 OK 再 reload
+sudo systemctl reload nginx
+```
+
+### 加 HTTPS（Let's Encrypt via Certbot）
+
+```bash
+sudo apt install certbot python3-certbot-nginx
+sudo certbot --nginx -d toto.your-domain.com
+# 自动改 vhost 加 listen 443 ssl 段、申请证书、安装 cron 续期任务
+```
+
+完成后 `https://toto.your-domain.com` 就通了，跟同 VPS 的其它站点共存。
+
+### 关键差异速查
+
+| | `docker-compose.prod.yml` | `docker-compose.shared.yml` |
+|---|---|---|
+| 用 Caddy 容器 | ✅ | ❌（宿主反代代替）|
+| 占 :80/:443 | ✅ | ❌ |
+| 后端端口 | 仅 compose 内部 | `127.0.0.1:8001`（loopback only）|
+| 自动 HTTPS | ✅ Caddy 自动 | 自己 `certbot --nginx` |
+| 前端 dist 由谁 serve | Caddy 容器 | 宿主 nginx 直读 `frontend/dist` |
+| 更新前端 | 重 build 即生效 | 同（nginx 不用 reload）|
+| 适合 | 独占 VPS 的新部署 | 多站点共存的老 VPS |
+
+### Traefik / 宿主 Caddy 用户
+
+宿主用 Traefik：删 `docker-compose.shared.yml` 里 `ports:` 段，改 `networks:` 加入 traefik 网络，再加 `labels:` 让 Traefik 发现。
+
+宿主用 Caddy（systemd 版）：和 nginx 同套思路，加段 reverse_proxy：
+```
+toto.your-domain.com {
+    handle /api/* { reverse_proxy 127.0.0.1:8001 }
+    handle /docs* { reverse_proxy 127.0.0.1:8001 }
+    handle /openapi.json { reverse_proxy 127.0.0.1:8001 }
+    handle /health { reverse_proxy 127.0.0.1:8001 }
+    handle {
+        root * /home/USER/ai_singapore_tools/frontend/dist
+        try_files {path} /index.html
+        file_server
+    }
+}
+```
+
+---
+
 ## 12. 卸载
 
 ```bash

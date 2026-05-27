@@ -1,0 +1,63 @@
+# 宿主机 nginx 反代模板（共享 VPS 场景）
+#
+# 复制到: /etc/nginx/sites-available/toto.your-domain.com.conf
+# 替换占位:
+#   - toto.your-domain.com  -> 你的真实域名
+#   - /home/USER/...         -> git clone 后的绝对路径
+#   - 8001                   -> docker-compose.shared.yml 里 BACKEND_PORT 的值
+# 启用:
+#   sudo ln -s /etc/nginx/sites-available/toto.your-domain.com.conf /etc/nginx/sites-enabled/
+#   sudo nginx -t && sudo systemctl reload nginx
+# 装 HTTPS:
+#   sudo apt install certbot python3-certbot-nginx
+#   sudo certbot --nginx -d toto.your-domain.com
+#   (certbot 会自动改这个文件加 listen 443 ssl 段，并重载 nginx)
+
+server {
+    listen 80;
+    listen [::]:80;
+    server_name toto.your-domain.com;
+
+    # ====== 前端静态 ======
+    # 直接指向 vite build 的 dist 目录（绝对路径）。
+    # frontend 每次 npm run build 后内容就刷新，nginx 不用 reload。
+    root /home/USER/ai_singapore_tools/frontend/dist;
+    index index.html;
+
+    # gzip / 静态缓存
+    gzip on;
+    gzip_vary on;
+    gzip_min_length 1024;
+    gzip_types text/plain text/css text/javascript application/javascript application/json image/svg+xml;
+
+    location ~* \.(?:js|css|woff2?|ttf|svg|png|jpg|jpeg|gif|webp|ico)$ {
+        expires 30d;
+        add_header Cache-Control "public, immutable";
+        try_files $uri =404;
+    }
+
+    # ====== API / FastAPI 自带页 反代到 docker 容器 ======
+    location ~ ^/(api/|docs($|/)|redoc($|/)|openapi\.json|health$) {
+        proxy_pass         http://127.0.0.1:8001;
+        proxy_http_version 1.1;
+        proxy_set_header   Host              $host;
+        proxy_set_header   X-Real-IP         $remote_addr;
+        proxy_set_header   X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header   X-Forwarded-Proto $scheme;
+        proxy_set_header   Upgrade           $http_upgrade;
+        proxy_set_header   Connection        "upgrade";
+
+        # 长连接 / 大响应（共现矩阵 49x49 不大，预留）
+        proxy_read_timeout 60s;
+        proxy_buffering    on;
+    }
+
+    # ====== SPA fallback：所有其它路径回 index.html ======
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+
+    # 静态文件 404 不要走到 index.html（避免假 200）
+    location = /favicon.ico { access_log off; log_not_found off; }
+    location = /robots.txt  { access_log off; log_not_found off; }
+}
