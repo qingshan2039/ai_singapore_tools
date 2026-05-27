@@ -3,14 +3,13 @@ defineProps({
   sortAdditional: Boolean,
   colorful: Boolean,
 })
-defineEmits(['update:sortAdditional', 'update:colorful', 'scan'])
+defineEmits(['update:sortAdditional', 'update:colorful'])
 </script>
 
 <template>
   <div class="top">
     <div class="search-row">
-      <input type="text" placeholder="" aria-label="Search" />
-      <button class="scan" @click="$emit('scan')">Scan</button>
+      <input type="text" placeholder="Search" aria-label="Search" />
     </div>
     <div class="toggles">
       <label>
@@ -44,7 +43,6 @@ defineEmits(['update:sortAdditional', 'update:colorful', 'scan'])
   font-size: 16px;
   background: #fff;
 }
-.scan { background: none; border: none; color: var(--primary); font-size: 18px; font-weight: 500; cursor: pointer; padding: 0 4px; }
 
 .toggles { display: flex; justify-content: center; gap: 28px; margin-top: 12px; color: var(--primary); font-size: 17px; }
 .toggles label { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; user-select: none; }

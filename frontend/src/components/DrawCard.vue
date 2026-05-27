@@ -3,7 +3,7 @@ import { computed } from 'vue'
 
 const props = defineProps({
   draw: { type: Object, required: true },
-  isLatest: { type: Boolean, default: false },
+  isLatest: { type: Boolean, default: false },  // 仅用于 "(Latest)" 标记
   sortAdditional: { type: Boolean, default: false },
   colorful: { type: Boolean, default: true },
 })
@@ -42,7 +42,7 @@ const renderNumbers = computed(() => {
 </script>
 
 <template>
-  <div class="card" :class="{ alt: !isLatest }">
+  <div class="card">
     <button class="info-btn" aria-label="详情">i</button>
     <div class="date-row">
       <span class="date">{{ headerDate }}</span>
@@ -65,7 +65,6 @@ const renderNumbers = computed(() => {
   padding: 18px 16px 22px;
   background: #fff;
 }
-.card.alt { background: var(--bg-alt); }
 
 .date-row {
   display: flex;

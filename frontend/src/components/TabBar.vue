@@ -5,11 +5,10 @@ defineProps({
 defineEmits(['change'])
 
 const tabs = [
-  { id: 'toto',     label: 'TOTO',     icon: 'M' },
-  { id: '4d',       label: '4D',       icon: 'C' },
-  { id: 'sweep',    label: 'SWEEP',    icon: '$' },
-  { id: 'stats',    label: 'Stats',    icon: '#' },
-  { id: 'settings', label: 'Settings', icon: 'G' },
+  { id: 'toto',  label: 'TOTO',  icon: 'M' },
+  { id: '4d',    label: '4D',    icon: 'C' },
+  { id: 'sweep', label: 'SWEEP', icon: '$' },
+  { id: 'stats', label: 'Stats', icon: '#' },
 ]
 </script>
 

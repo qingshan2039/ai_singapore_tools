@@ -1,7 +1,6 @@
 <script setup>
-import { onMounted, onBeforeUnmount, ref, watch, computed } from 'vue'
+import { onMounted, onBeforeUnmount, ref, nextTick } from 'vue'
 import TopControls from './components/TopControls.vue'
-import JackpotBanner from './components/JackpotBanner.vue'
 import DrawCard from './components/DrawCard.vue'
 import TabBar from './components/TabBar.vue'
 import { useDraws } from './composables/useDraws.js'
@@ -10,28 +9,41 @@ const sortAdditional = ref(false)
 const colorful = ref(true)
 const activeTab = ref('toto')
 
-const { items, total, loading, error, done, loadMore } = useDraws({ pageSize: 20 })
+const { items, total, loading, error, done, loadMore } = useDraws({ pageSize: 50 })
 
-// 触底哨兵 + IntersectionObserver
+// === 无限滚动 ===
+// 关键 bug 修复：IntersectionObserver 的 callback 只在 isIntersecting 状态
+// 翻转时触发。如果首屏太短、sentinel 一直在视口里，加载完一页后状态没变
+// → 回调不会再触发 → 看起来只加载一页就停了。
+// 解决：每次回调里用 while-loop + 几何位置判断，主动连续加载直到 sentinel
+// 不可见或已全部加载。
 const sentinel = ref(null)
 let observer = null
 
+function isSentinelNearViewport() {
+  if (!sentinel.value) return false
+  const rect = sentinel.value.getBoundingClientRect()
+  // rootMargin 400px → 距离视口底部 400px 内就算可见
+  return rect.top < window.innerHeight + 400
+}
+
+async function loadWhileVisible() {
+  while (!done.value && !loading.value && isSentinelNearViewport()) {
+    await loadMore()
+    await nextTick()  // 等 DOM 渲染后再判断几何位置
+  }
+}
+
 onMounted(async () => {
-  await loadMore()  // 首屏
-  observer = new IntersectionObserver((entries) => {
-    if (entries[0].isIntersecting) loadMore()
-  }, { rootMargin: '200px' })
+  await loadMore()        // 首屏
+  await loadWhileVisible() // 万一首屏不够撑满，再补几页
+  observer = new IntersectionObserver(
+    () => { loadWhileVisible() },
+    { rootMargin: '400px' }
+  )
   if (sentinel.value) observer.observe(sentinel.value)
 })
 onBeforeUnmount(() => observer?.disconnect())
-
-// 下期开奖估值（DB 还没存这个字段，先用最新一期占位/或简单占位）
-const nextJackpot = computed(() => {
-  // 没有"下期估值"字段，用最新已知 jackpot 或固定占位
-  const first = items.value[0]
-  return first?.jackpot_amount ?? 4500000
-})
-const nextDrawText = computed(() => 'Thu, 28 May 2026, 6.30pm')
 </script>
 
 <template>
@@ -39,8 +51,6 @@ const nextDrawText = computed(() => 'Thu, 28 May 2026, 6.30pm')
     v-model:sortAdditional="sortAdditional"
     v-model:colorful="colorful"
   />
-
-  <JackpotBanner :amount="nextJackpot" :next-draw-text="nextDrawText" />
 
   <main v-if="activeTab === 'toto'" class="list">
     <DrawCard
@@ -53,7 +63,7 @@ const nextDrawText = computed(() => 'Thu, 28 May 2026, 6.30pm')
     />
 
     <div ref="sentinel" class="sentinel">
-      <span v-if="loading">Loading…</span>
+      <span v-if="loading">Loading… ({{ items.length }} / {{ total || '?' }})</span>
       <span v-else-if="error" class="err">⚠ {{ error }} <button @click="loadMore">Retry</button></span>
       <span v-else-if="done" class="done">— {{ total }} draws loaded —</span>
       <span v-else>&nbsp;</span>
