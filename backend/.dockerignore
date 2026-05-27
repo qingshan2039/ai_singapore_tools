@@ -1,0 +1,20 @@
+# 不要把开发期的本地产物塞进镜像 context
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.env
+.env.local
+*.db
+*.db-journal
+*.sqlite*
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.DS_Store
+
+# 不要塞进 raw 抓取产物
+toto.db
+test-results/
+playwright-report/

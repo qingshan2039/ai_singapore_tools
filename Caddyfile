@@ -1,0 +1,35 @@
+# Caddy 配置
+#
+# 用法：
+# - 配 .env.prod 里的 DOMAIN=your.domain.com，Caddy 会自动申请并续期 Let's Encrypt 证书
+# - 不配 DOMAIN（或设为 localhost / IP），Caddy 只 listen :80（无 HTTPS）
+#
+# 反代路径：
+#   /api/*           -> backend:8000
+#   /docs, /redoc    -> backend:8000 (FastAPI 自带 Swagger / ReDoc)
+#   /openapi.json    -> backend:8000
+#   /health          -> backend:8000
+#   其它             -> 静态前端 (/srv，前端 vite build 产物)
+
+{$DOMAIN:localhost} {
+    encode zstd gzip
+
+    log {
+        output stdout
+        format console
+    }
+
+    @backend {
+        path /api/* /docs /docs/* /redoc /redoc/* /openapi.json /health
+    }
+    handle @backend {
+        reverse_proxy backend:8000
+    }
+
+    handle {
+        root * /srv
+        # 静态文件优先，找不到则回 index.html（支持前端路由）
+        try_files {path} /index.html
+        file_server
+    }
+}

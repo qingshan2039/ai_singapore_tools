@@ -24,8 +24,14 @@ yarn-error.log*
 .env
 .env.local
 .env.*.local
+.env.prod
 # 保留模板
 !.env.example
+!.env.prod.example
+
+# === 部署期本地数据 ===
+data/
+backups/
 
 # === Local data ===
 *.db
