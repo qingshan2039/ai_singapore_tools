@@ -1,5 +1,5 @@
 <script setup>
-import { onMounted, onBeforeUnmount, ref, nextTick } from 'vue'
+import { onMounted, onBeforeUnmount, ref, nextTick, computed } from 'vue'
 import TopControls from './components/TopControls.vue'
 import DrawCard from './components/DrawCard.vue'
 import TabBar from './components/TabBar.vue'
@@ -9,34 +9,59 @@ const sortAdditional = ref(false)
 const colorful = ref(true)
 const activeTab = ref('toto')
 
+// === Search 高亮 ===
+// 规则：
+// - 空字符串 → 不生效，列表按 colorful 显示
+// - 用空白分隔的数字 token，每个必须 ∈ [1, 49]
+// - 任一 token 非法 → 整体不生效 + 显示错误（行为可预测）
+// - 全部合法 → 列表中仅匹配号显示原色，其余置黑
+const searchInput = ref('')
+
+const parsedSearch = computed(() => {
+  const raw = searchInput.value.trim()
+  if (!raw) return { ok: true, numbers: new Set(), error: '' }
+  const tokens = raw.split(/\s+/)
+  const numbers = new Set()
+  for (const t of tokens) {
+    if (!/^\d+$/.test(t)) {
+      return { ok: false, numbers: new Set(), error: `"${t}" is not a number` }
+    }
+    const n = parseInt(t, 10)
+    if (n < 1 || n > 49) {
+      return { ok: false, numbers: new Set(), error: `${n} is out of range (1-49)` }
+    }
+    numbers.add(n)
+  }
+  return { ok: true, numbers, error: '' }
+})
+
+const highlight = computed(() =>
+  parsedSearch.value.ok ? parsedSearch.value.numbers : new Set()
+)
+const searchError = computed(() => parsedSearch.value.error)
+
 const { items, total, loading, error, done, loadMore } = useDraws({ pageSize: 50 })
 
 // === 无限滚动 ===
-// 关键 bug 修复：IntersectionObserver 的 callback 只在 isIntersecting 状态
-// 翻转时触发。如果首屏太短、sentinel 一直在视口里，加载完一页后状态没变
-// → 回调不会再触发 → 看起来只加载一页就停了。
-// 解决：每次回调里用 while-loop + 几何位置判断，主动连续加载直到 sentinel
-// 不可见或已全部加载。
 const sentinel = ref(null)
 let observer = null
 
 function isSentinelNearViewport() {
   if (!sentinel.value) return false
   const rect = sentinel.value.getBoundingClientRect()
-  // rootMargin 400px → 距离视口底部 400px 内就算可见
   return rect.top < window.innerHeight + 400
 }
 
 async function loadWhileVisible() {
   while (!done.value && !loading.value && isSentinelNearViewport()) {
     await loadMore()
-    await nextTick()  // 等 DOM 渲染后再判断几何位置
+    await nextTick()
   }
 }
 
 onMounted(async () => {
-  await loadMore()        // 首屏
-  await loadWhileVisible() // 万一首屏不够撑满，再补几页
+  await loadMore()
+  await loadWhileVisible()
   observer = new IntersectionObserver(
     () => { loadWhileVisible() },
     { rootMargin: '400px' }
@@ -48,6 +73,8 @@ onBeforeUnmount(() => observer?.disconnect())
 
 <template>
   <TopControls
+    v-model:search="searchInput"
+    :search-error="searchError"
     v-model:sortAdditional="sortAdditional"
     v-model:colorful="colorful"
   />
@@ -60,6 +87,7 @@ onBeforeUnmount(() => observer?.disconnect())
       :is-latest="i === 0"
       :sort-additional="sortAdditional"
       :colorful="colorful"
+      :highlight="highlight"
     />
 
     <div ref="sentinel" class="sentinel">

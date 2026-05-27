@@ -3,14 +3,14 @@ import { computed } from 'vue'
 
 const props = defineProps({
   draw: { type: Object, required: true },
-  isLatest: { type: Boolean, default: false },  // 仅用于 "(Latest)" 标记
+  isLatest: { type: Boolean, default: false },
   sortAdditional: { type: Boolean, default: false },
   colorful: { type: Boolean, default: true },
+  // 高亮集合：非空时只有集合内的号显示原色，其它号置黑
+  highlight: { type: Set, default: () => new Set() },
 })
 
-// 颜色按十位分桶，与截图一致
-function colorClass(n) {
-  if (!props.colorful) return 'mono'
+function bucketClass(n) {
   if (n <= 10) return 'c1'
   if (n <= 19) return 'c2'
   if (n <= 29) return 'c3'
@@ -18,18 +18,25 @@ function colorClass(n) {
   return 'c5'
 }
 
-// "25/05/2026 Mon" 格式
+function colorClass(n) {
+  // search 高亮模式优先：非空时仅匹配号保色
+  if (props.highlight && props.highlight.size > 0) {
+    return props.highlight.has(n) ? bucketClass(n) : 'mono'
+  }
+  // 无 search：按 Colorful 全彩 / 全黑
+  if (!props.colorful) return 'mono'
+  return bucketClass(n)
+}
+
 const headerDate = computed(() => {
   const [y, m, d] = props.draw.draw_date.split('-')
   return `${d}/${m}/${y} ${props.draw.draw_day || ''}`.trim()
 })
 
-// 6 个号 + 附加号；如果勾了 "Sort Additional Number"，附加号按数值并入主序
 const renderNumbers = computed(() => {
   const main = [...props.draw.numbers].sort((a, b) => a - b)
   const add = props.draw.additional_no
   if (props.sortAdditional) {
-    // 把附加号插入排序，但保留 isAdditional 标志（仍用斜体）
     const all = [...main.map(n => ({ n, additional: false })), { n: add, additional: true }]
     all.sort((a, b) => a.n - b.n)
     return all
