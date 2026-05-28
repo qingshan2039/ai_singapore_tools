@@ -207,15 +207,19 @@ docker compose -f docker-compose.prod.yml exec caddy caddy reload --config /etc/
 crontab -e
 ```
 
-加一行（端口/路径按你的环境改）：
+加一行（端口/路径/compose 文件名按你的环境改；共享 VPS 用 docker-compose.shared.yml）：
 
 ```cron
-0 1 * * 2,5 cd /home/$USER/ai_singapore_tools && \
-    docker compose -f docker-compose.prod.yml exec -T backend \
-    python scripts/backfill.py --start 3873 --end 9999 >> /var/log/toto-cron.log 2>&1
+0 1 * * 2,5 cd /opt/ai_singapore_tools && \
+    docker compose -f docker-compose.shared.yml exec -T backend \
+    python scripts/backfill.py --start 3873 --end 9999 --stop-after-misses 6 \
+    >> /var/log/toto-cron.log 2>&1
 ```
 
-backfill 自带"跳过已存在"逻辑，所以可以放心给个大区间。
+> ⚠️ **务必带 `--stop-after-misses`**。backfill 会跳过已存在的期，但对"还不存在的未来期"
+> 会逐个去抓、每个超时重试（极慢）。`--end 9999` + `--stop-after-misses 6` 的含义是：
+> "一直抓到连续 6 期都失败为止"——抓完最新几期、撞到未来期就自动停，几十秒内结束。
+> 不带这个参数的话 `--end 9999` 会空跑约 5800 个不存在的期，要跑好几个小时。
 
 ---
 

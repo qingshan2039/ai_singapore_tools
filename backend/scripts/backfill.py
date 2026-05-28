@@ -69,7 +69,7 @@ async def insert_draw(db: AsyncSession, parsed, raw_html: str, source_url: str) 
     await db.commit()
 
 
-async def main(start: int, end: int, delay: float, force: bool) -> None:
+async def main(start: int, end: int, delay: float, force: bool, stop_after_misses: int) -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 
     async with AsyncSessionLocal() as db:
@@ -84,6 +84,7 @@ async def main(start: int, end: int, delay: float, force: bool) -> None:
         return
 
     succeeded, failed = 0, 0
+    consecutive_misses = 0
     async with TotoScraper() as scraper:
         for draw_no in targets:
             result = await scraper.scrape(draw_no)
@@ -92,13 +93,25 @@ async def main(start: int, end: int, delay: float, force: bool) -> None:
                     try:
                         await insert_draw(db, result.data, result.raw_html, f"draw_no={draw_no}")
                         succeeded += 1
+                        consecutive_misses = 0
                         log.info("  ✓ Draw %d saved (%dms)", draw_no, result.duration_ms)
                     except Exception as e:
                         log.exception("  ✗ DB insert failed for draw %d: %s", draw_no, e)
                         failed += 1
+                        consecutive_misses += 1
             else:
                 failed += 1
+                consecutive_misses += 1
                 log.warning("  ✗ Draw %d failed: %s", draw_no, result.error)
+
+            # 连续失败太多次 = 大概率已经抓到"还不存在的未来期"，提前停止，
+            # 避免 --end 给太大时空跑几千个不存在的期（每个都超时重试，极慢）
+            if stop_after_misses and consecutive_misses >= stop_after_misses:
+                log.info(
+                    "Stopping early: %d consecutive misses (likely past the latest available draw)",
+                    consecutive_misses,
+                )
+                break
 
             await asyncio.sleep(delay)
 
@@ -112,6 +125,13 @@ if __name__ == "__main__":
     parser.add_argument("--end", type=int, required=True, help="结束期号")
     parser.add_argument("--delay", type=float, default=5.0, help="单期间隔秒数")
     parser.add_argument("--force", action="store_true", help="忽略已有，全部重抓")
+    parser.add_argument(
+        "--stop-after-misses",
+        type=int,
+        default=0,
+        help="连续失败 N 次后提前停止（0=不启用）。配合大的 --end 抓增量时强烈建议设 5~8，"
+        "否则会空跑大量不存在的未来期",
+    )
     args = parser.parse_args()
 
-    asyncio.run(main(args.start, args.end, args.delay, args.force))
+    asyncio.run(main(args.start, args.end, args.delay, args.force, args.stop_after_misses))
