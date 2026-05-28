@@ -8,8 +8,11 @@ export function useDraws({ pageSize = 20 } = {}) {
   const loading = ref(false)
   const error = ref(null)
 
-  const hasMore = computed(() => items.value.length < total.value || total.value === 0)
-  const done = computed(() => total.value > 0 && items.value.length >= total.value)
+  // done：至少成功加载过一页(page>0)后，已拿到的条数 >= 总数即完成。
+  // 用 page>0 而不是 total>0，这样空库(total=0)在首次加载后 0>=0 → done=true，
+  // 不会陷入"total 永远 0 → done 永远 false → 无限请求"的死循环。
+  const done = computed(() => page.value > 0 && items.value.length >= total.value)
+  const hasMore = computed(() => page.value === 0 || items.value.length < total.value)
 
   async function loadMore() {
     if (loading.value || done.value) return
