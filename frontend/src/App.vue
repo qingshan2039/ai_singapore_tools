@@ -71,10 +71,22 @@ function isSentinelNearViewport() {
 }
 
 async function loadWhileVisible() {
-  while (!done.value && !loading.value && isSentinelNearViewport()) {
+  // 关键：必须带 !error.value。否则一旦某页请求失败（500/网络断），
+  // loadMore 会把 error 置位但 page 不前进、done 仍为 false，
+  // 循环条件持续满足 → 无限狂打失败接口。带上 error 检查后，出错即停，
+  // 由用户点 Retry 手动恢复。
+  while (!done.value && !loading.value && !error.value && isSentinelNearViewport()) {
     await loadMore()
     await nextTick()
   }
+}
+
+// Retry：清掉错误后重试当前页，成功则继续自动加载
+async function retry() {
+  if (loading.value) return
+  error.value = null
+  await loadMore()
+  if (!error.value) await loadWhileVisible()
 }
 
 onMounted(async () => {
@@ -120,7 +132,7 @@ onBeforeUnmount(() => observer?.disconnect())
 
     <div ref="sentinel" class="sentinel">
       <span v-if="loading">Loading… ({{ items.length }} / {{ total || '?' }})</span>
-      <span v-else-if="error" class="err">⚠ {{ error }} <button @click="loadMore">Retry</button></span>
+      <span v-else-if="error" class="err">⚠ {{ error }} <button @click="retry">Retry</button></span>
       <span v-else-if="done" class="done">
         <template v-if="filterActive">— showing {{ displayedItems.length }} of {{ total }} draws —</template>
         <template v-else>— {{ total }} draws loaded —</template>
